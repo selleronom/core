@@ -296,6 +296,7 @@ FLOWS = {
         "mikrotik",
         "mill",
         "minecraft_server",
+        "mittfortum",
         "mjpeg",
         "moat",
         "mobile_app",
