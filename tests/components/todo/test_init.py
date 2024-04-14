@@ -20,7 +20,7 @@ from homeassistant.components.todo import (
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState, ConfigFlow
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import intent
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -180,14 +180,14 @@ async def test_unload_entry(
     """Test unloading a config entry with a todo entity."""
 
     config_entry = await create_mock_platform(hass, [test_entity])
-    assert config_entry.state == ConfigEntryState.LOADED
+    assert config_entry.state is ConfigEntryState.LOADED
 
     state = hass.states.get("todo.entity1")
     assert state
 
     assert await hass.config_entries.async_unload(config_entry.entry_id)
     await hass.async_block_till_done()
-    assert config_entry.state == ConfigEntryState.NOT_LOADED
+    assert config_entry.state is ConfigEntryState.NOT_LOADED
 
     state = hass.states.get("todo.entity1")
     assert not state
@@ -227,23 +227,11 @@ async def test_list_todo_items(
     [
         ({}, [ITEM_1, ITEM_2]),
         (
-            [
-                {"status": [TodoItemStatus.COMPLETED, TodoItemStatus.NEEDS_ACTION]},
-                [ITEM_1, ITEM_2],
-            ]
+            {"status": [TodoItemStatus.COMPLETED, TodoItemStatus.NEEDS_ACTION]},
+            [ITEM_1, ITEM_2],
         ),
-        (
-            [
-                {"status": [TodoItemStatus.NEEDS_ACTION]},
-                [ITEM_1],
-            ]
-        ),
-        (
-            [
-                {"status": [TodoItemStatus.COMPLETED]},
-                [ITEM_2],
-            ]
-        ),
+        ({"status": [TodoItemStatus.NEEDS_ACTION]}, [ITEM_1]),
+        ({"status": [TodoItemStatus.COMPLETED]}, [ITEM_2]),
     ],
 )
 async def test_get_items_service(
@@ -347,21 +335,21 @@ async def test_add_item_service_raises(
         ({"item": ""}, vol.Invalid, "length of value must be at least 1"),
         (
             {"item": "Submit forms", "description": "Submit tax forms"},
-            ValueError,
-            "does not support setting field 'description'",
+            ServiceValidationError,
+            "does not support setting field: description",
         ),
         (
             {"item": "Submit forms", "due_date": "2023-11-17"},
-            ValueError,
-            "does not support setting field 'due_date'",
+            ServiceValidationError,
+            "does not support setting field: due_date",
         ),
         (
             {
                 "item": "Submit forms",
                 "due_datetime": f"2023-11-17T17:00:00{TEST_OFFSET}",
             },
-            ValueError,
-            "does not support setting field 'due_datetime'",
+            ServiceValidationError,
+            "does not support setting field: due_datetime",
         ),
     ],
 )
@@ -376,7 +364,7 @@ async def test_add_item_service_invalid_input(
 
     await create_mock_platform(hass, [test_entity])
 
-    with pytest.raises(expected_exception, match=expected_error):
+    with pytest.raises(expected_exception) as exc:
         await hass.services.async_call(
             DOMAIN,
             "add_item",
@@ -385,10 +373,12 @@ async def test_add_item_service_invalid_input(
             blocking=True,
         )
 
+    assert expected_error in str(exc.value)
+
 
 @pytest.mark.parametrize(
     ("supported_entity_feature", "item_data", "expected_item"),
-    (
+    [
         (
             TodoListEntityFeature.SET_DUE_DATE_ON_ITEM,
             {"item": "New item", "due_date": "2023-11-13"},
@@ -434,7 +424,7 @@ async def test_add_item_service_invalid_input(
                 description="Submit revised draft",
             ),
         ),
-    ),
+    ],
 )
 async def test_add_item_service_extended_fields(
     hass: HomeAssistant,
@@ -622,7 +612,7 @@ async def test_update_todo_item_service_by_summary_not_found(
 
     await create_mock_platform(hass, [test_entity])
 
-    with pytest.raises(ValueError, match="Unable to find"):
+    with pytest.raises(ServiceValidationError, match="Unable to find"):
         await hass.services.async_call(
             DOMAIN,
             "update_item",
@@ -681,7 +671,7 @@ async def test_update_todo_item_field_unsupported(
 
     await create_mock_platform(hass, [test_entity])
 
-    with pytest.raises(ValueError, match="does not support"):
+    with pytest.raises(ServiceValidationError, match="does not support"):
         await hass.services.async_call(
             DOMAIN,
             "update_item",
@@ -693,7 +683,7 @@ async def test_update_todo_item_field_unsupported(
 
 @pytest.mark.parametrize(
     ("supported_entity_feature", "update_data", "expected_update"),
-    (
+    [
         (
             TodoListEntityFeature.SET_DUE_DATE_ON_ITEM,
             {"due_date": "2023-11-13"},
@@ -724,7 +714,7 @@ async def test_update_todo_item_field_unsupported(
                 description="Submit revised draft",
             ),
         ),
-    ),
+    ],
 )
 async def test_update_todo_item_extended_fields(
     hass: HomeAssistant,
@@ -754,7 +744,7 @@ async def test_update_todo_item_extended_fields(
 
 @pytest.mark.parametrize(
     ("test_entity_items", "update_data", "expected_update"),
-    (
+    [
         (
             [TodoItem(uid="1", summary="Summary", description="description")],
             {"description": "Submit revised draft"},
@@ -802,7 +792,7 @@ async def test_update_todo_item_extended_fields(
             {"due_datetime": None},
             TodoItem(uid="1", summary="Summary"),
         ),
-    ),
+    ],
     ids=[
         "overwrite_description",
         "overwrite_empty_description",
@@ -931,7 +921,7 @@ async def test_remove_todo_item_service_by_summary_not_found(
 
     await create_mock_platform(hass, [test_entity])
 
-    with pytest.raises(ValueError, match="Unable to find"):
+    with pytest.raises(ServiceValidationError, match="Unable to find"):
         await hass.services.async_call(
             DOMAIN,
             "remove_item",
